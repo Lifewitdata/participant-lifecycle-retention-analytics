@@ -1,0 +1,29 @@
+# Core data processing — Polars only, Pandas is intentionally excluded
+polars>=1.9.0
+pyarrow>=17.0.0          # Parquet I/O backend for Polars
+
+# Statistics & experimentation (Step 9)
+scipy>=1.13.0
+statsmodels>=0.14.2
+
+# Machine learning (Step 10)
+scikit-learn>=1.5.0
+
+# Visualization (Step 12) — Matplotlib + Plotly only, no Seaborn
+matplotlib>=3.9.0
+plotly>=5.24.0
+kaleido>=0.2.1           # static image export for Plotly
+
+# Config & utilities
+PyYAML>=6.0.2
+python-dotenv>=1.0.1
+
+# Dev / notebooks
+jupyter>=1.1.0
+ipykernel>=6.29.5
+
+# Code quality
+black>=24.8.0
+ruff>=0.6.9
+mypy>=1.11.2
+pytest>=8.3.3

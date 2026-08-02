@@ -1,0 +1,102 @@
+# =============================================================================
+# Participant Lifecycle & Retention Analytics — Central Configuration
+# -----------------------------------------------------------------------------
+# Business rule: nothing that could plausibly change (a threshold, a path,
+# a window size) should be hardcoded in src/. Product/Growth own these
+# numbers; Engineering owns the code that reads them.
+# =============================================================================
+
+project:
+  name: "participant-lifecycle-retention-analytics"
+  timezone: "UTC"
+  random_seed: 42
+
+# ---------------------------------------------------------------------------
+# Paths — relative to project root
+# ---------------------------------------------------------------------------
+paths:
+  data_raw: "data/raw"
+  data_interim: "data/interim"
+  data_processed: "data/processed"
+  logs: "logs"
+  outputs_figures: "outputs/figures"
+  outputs_tables: "outputs/tables"
+  reports_data_quality: "reports/data_quality"
+  reports_business_insights: "reports/business_insights"
+
+# ---------------------------------------------------------------------------
+# Raw source files
+# ---------------------------------------------------------------------------
+raw_files:
+  participants: "participants.csv"
+  onboarding: "onboarding.csv"
+  studies: "studies.csv"
+  submissions: "submissions.csv"
+  payments: "payments.csv"
+  engagement_events: "engagement_events.csv"
+
+# ---------------------------------------------------------------------------
+# Lifecycle / business thresholds
+# Every downstream KPI function reads FROM here — never hardcoded.
+# ---------------------------------------------------------------------------
+lifecycle_thresholds:
+  onboarding_grace_period_days: 14      # signup->activation window before "never_activated"
+  at_risk_inactivity_days: 30           # no activity in 30d -> at_risk
+  churn_inactivity_days: 90             # no activity in 90d -> churned
+  reactivation_min_dormancy_days: 30    # min gap since last activity to count a return as "reactivation"
+  weekly_active_window_days: 7
+  monthly_active_window_days: 30
+
+# ---------------------------------------------------------------------------
+# Data quality rules (used by cleaning + validation layers)
+# ---------------------------------------------------------------------------
+data_quality:
+  min_valid_date: "2020-01-01"
+  max_valid_date: "2030-01-01"
+  reward_min: 0.0
+  reward_max: 100.0                     # sanity ceiling per single reward
+  completion_time_min_minutes: 0.0
+  completion_time_max_minutes: 480.0    # 8 hours sanity ceiling
+  valid_submission_statuses: ["completed", "returned", "timed_out", "rejected"]
+  valid_payment_types: ["study_reward", "referral_bonus", "loyalty_bonus"]
+  valid_account_statuses: ["onboarding", "active", "at_risk", "churned", "never_activated"]
+
+# ---------------------------------------------------------------------------
+# Quality score weights (participant quality / risk scoring, Step 4)
+# ---------------------------------------------------------------------------
+scoring_weights:
+  quality_score:
+    approval_rate: 0.40
+    completion_rate: 0.35
+    engagement_score: 0.25
+  risk_score:
+    recency_weight: 0.50
+    frequency_weight: 0.30
+    quality_weight: 0.20
+
+# ---------------------------------------------------------------------------
+# Experimentation (Step 9)
+# ---------------------------------------------------------------------------
+experimentation:
+  significance_level: 0.05
+  onboarding_ab_test:
+    control_label: "onboarding_v1"
+    treatment_label: "onboarding_v2"
+
+# ---------------------------------------------------------------------------
+# Modeling (Step 10)
+# ---------------------------------------------------------------------------
+modeling:
+  churn_label_definition: "account_status == 'churned'"
+  test_size: 0.2
+  cv_folds: 5
+  models: ["logistic_regression", "random_forest", "gradient_boosting"]
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+logging:
+  level: "INFO"
+  log_file: "pipeline.log"
+  max_bytes: 5242880       # 5 MB per log file before rotation
+  backup_count: 5
