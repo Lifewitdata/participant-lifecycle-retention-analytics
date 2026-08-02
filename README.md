@@ -393,7 +393,7 @@ participant-lifecycle-analytics/
 
 ```bash
 # 1. Clone
-git clone https://github.com/your-username/participant-lifecycle-analytics.git
+git clone https://github.com/Lifewitdata/participant-lifecycle-analytics.git
 cd participant-lifecycle-analytics
 
 # 2. Set up environment
