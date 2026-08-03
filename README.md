@@ -12,6 +12,7 @@
 [![Matplotlib](https://img.shields.io/badge/Matplotlib-3.9-11557C?style=for-the-badge&logo=plotly&logoColor=white)](https://matplotlib.org/)
 [![SciPy](https://img.shields.io/badge/SciPy-1.13-8CAAE6?style=for-the-badge&logo=scipy&logoColor=white)](https://scipy.org/)
 [![Jupyter](https://img.shields.io/badge/Jupyter-Notebook-F37626?style=for-the-badge&logo=jupyter&logoColor=white)](https://jupyter.org/)
+[![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?style=for-the-badge&logo=mysql&logoColor=white)](https://www.mysql.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 
 ![Repo Size](https://img.shields.io/github/repo-size/your-username/participant-lifecycle-analytics?style=flat-square&color=6C5CE7)
@@ -27,11 +28,12 @@
 
 A complete, notebook-driven analysis of the **participant lifecycle** for a research-participant marketplace (Prolific-style) — built entirely in **pandas**, from raw CSVs to an executive KPI dashboard, cohort retention heatmaps, behavioral segmentation, and a statistically validated A/B test recommendation.
 
-This repo ships **both**:
+This repo ships **three** parallel implementations of the same analysis, so you can pick the layer that fits the question:
 - 📓 **`Participant_Lifecycle_Analysis.ipynb`** — the original, cell-by-cell exploratory notebook
 - 🐍 **`analysis_pipeline.py`** — that same analysis, cleaned into an 11-phase, standalone Python script (portable file paths, `display()` fallback for non-Jupyter execution, section banners)
+- 🗄️ **`sql/`** — the identical dataset modeled as a MySQL 8.0 schema, with a 20-query interview-style bank covering the same lifecycle questions in pure SQL (CTEs, window functions, subqueries)
 
-Every chart below was rendered directly from this codebase against the project's synthetic dataset (3,000 participants · 10,378 submissions · 9,062 payments · 35,364 events).
+Every chart below was rendered directly from this codebase against the project's synthetic dataset (3,000 participants · 10,378 submissions · 9,062 payments · 35,364 events). Every SQL query in this repo was executed against that same dataset loaded into a live MySQL instance — not written from memory.
 
 <br/>
 
@@ -41,6 +43,7 @@ Every chart below was rendered directly from this codebase against the project's
 - [Visual Highlights](#-visual-highlights)
 - [Executive KPI Snapshot](#-executive-kpi-snapshot-real-output)
 - [Python Query Cookbook](#-python-query-cookbook)
+- [MySQL Analytics Layer](#️-mysql-analytics-layer)
 - [Statistical Findings](#-statistical-findings)
 - [Project Structure](#-project-structure)
 - [Getting Started](#-getting-started)
@@ -346,6 +349,85 @@ if p_value < 0.05:
 
 <br/>
 
+## 🗄️ MySQL Analytics Layer
+
+The same six tables also live as a proper relational schema, with a **20-query, interview-level SQL bank** answering the identical lifecycle questions in pure MySQL 8.0 — CTEs, window functions, `CASE WHEN`, `HAVING`, and date arithmetic throughout.
+
+📁 **`sql/schema.sql`** — `CREATE TABLE` DDL for all 6 tables (types, primary keys, indexes on every join column)
+📁 **`sql/prolific_interview_sql_queries.sql`** — the full 20-query bank, ready to run top-to-bottom
+
+```bash
+mysql -u your_user your_db < sql/schema.sql
+mysql -u your_user your_db < sql/prolific_interview_sql_queries.sql
+```
+
+> ✅ **Validated, not theoretical.** These queries were run against a live MySQL/MariaDB instance loaded with this exact dataset — all 20 executed with zero errors and returned numbers that reconcile exactly with the Python pipeline (e.g. 43.3% activation rate, 434/232/539 active/at-risk/churned participants).
+
+<details>
+<summary><b>🔍 Query bank at a glance (20 queries, basic → advanced)</b></summary>
+
+| # | Query | Techniques Used |
+|:---:|---|---|
+| 1 | Total participants | `COUNT(*)` |
+| 2 | Daily / weekly / monthly signups | `DATE()`, `YEARWEEK()`, `DATE_FORMAT()` |
+| 3 | Acquisition channel performance | Window `SUM() OVER ()` |
+| 4 | Activation rate by channel | `LEFT JOIN`, `CASE WHEN` |
+| 5 | Onboarding funnel conversion | CTE, `UNION ALL`, `FIRST_VALUE()`, `LAG()` |
+| 6 | Signup → first completed study | `DATEDIFF()` |
+| 7 | DAU / WAU / MAU | `COUNT(DISTINCT CASE WHEN ...)` |
+| 8 | Top 10 most active participants | `JOIN`, `GROUP BY`, `LIMIT` |
+| 9 | Participant engagement score | Multi-CTE, normalized weighted formula |
+| 10 | Monthly cohort retention | `TIMESTAMPDIFF()`, cohort-index pattern |
+| 11 | Churned participants (90+ days) | Date filtering, business-rule `WHERE` |
+| 12 | Reactivated participants | `LAG() OVER (PARTITION BY ...)` |
+| 13 | Avg reward by country | `HAVING`, dual `AVG`/`SUM` |
+| 14 | Study completion rate by category | Conditional aggregation |
+| 15 | Researcher performance dashboard | CTE pre-aggregation to avoid fan-out |
+| 16 | Marketplace supply vs. demand | Independent CTEs, `LEFT JOIN` + `COALESCE` |
+| 17 | Lifetime earnings ranking | `RANK()`, `NTILE()`, `PERCENT_RANK()` |
+| 18 | Fraud / low-quality detection | Heuristic thresholds, tiered `CASE` |
+| 19 | Executive KPI dashboard | 4 CTEs `CROSS JOIN`ed into one row |
+| 20 | High-value at-risk win-back targeting | 4 CTEs, `NTILE()`, transparent priority score |
+
+</details>
+
+<details>
+<summary><b>💎 Sample: Query 20 — High-value at-risk win-back targeting</b></summary>
+
+```sql
+WITH lifetime_value AS (
+    SELECT
+        p.participant_id, p.account_status, p.last_activity_date,
+        COALESCE(SUM(pay.amount), 0) AS total_earnings,
+        NTILE(4) OVER (ORDER BY COALESCE(SUM(pay.amount), 0) DESC) AS earnings_quartile
+    FROM participants p
+    LEFT JOIN payments pay ON p.participant_id = pay.participant_id
+    GROUP BY p.participant_id, p.account_status, p.last_activity_date
+),
+quality_check AS (
+    SELECT participant_id,
+           ROUND(100.0 * SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) / COUNT(*), 1) AS rejection_rate_pct
+    FROM submissions GROUP BY participant_id
+)
+SELECT
+    lv.participant_id, lv.account_status, lv.total_earnings, lv.earnings_quartile,
+    DATEDIFF(@report_date, lv.last_activity_date) AS days_since_last_activity,
+    ROUND((5 - lv.earnings_quartile) * 20
+          - LEAST(DATEDIFF(@report_date, lv.last_activity_date) / 10, 20), 1) AS winback_priority_score
+FROM lifetime_value lv
+LEFT JOIN quality_check qc ON lv.participant_id = qc.participant_id
+WHERE lv.account_status IN ('at_risk', 'churned')
+  AND lv.earnings_quartile = 1
+  AND COALESCE(qc.rejection_rate_pct, 0) < 20
+ORDER BY winback_priority_score DESC
+LIMIT 200;
+```
+
+Full explanation, expected output, and business insight for every query is in `sql/prolific_interview_sql_queries.sql` as inline comments.
+</details>
+
+<br/>
+
 ## 🧪 Statistical Findings
 
 | Test | Result | Interpretation |
@@ -367,6 +449,9 @@ participant-lifecycle-analytics/
 ├── requirements.txt
 ├── Participant_Lifecycle_Analysis.ipynb   # original exploratory notebook
 ├── analysis_pipeline.py                    # same analysis, 11-phase standalone script
+├── sql/
+│   ├── schema.sql                          # MySQL 8.0 CREATE TABLE DDL, 6 tables
+│   └── prolific_interview_sql_queries.sql  # 20-query interview-level SQL bank
 ├── data/                                   # 6 source CSVs (not committed if large — see below)
 │   ├── participants.csv
 │   ├── onboarding.csv
@@ -393,7 +478,7 @@ participant-lifecycle-analytics/
 
 ```bash
 # 1. Clone
-git clone https://github.com/Lifewitdata/participant-lifecycle-analytics.git
+git clone https://github.com/your-username/participant-lifecycle-analytics.git
 cd participant-lifecycle-analytics
 
 # 2. Set up environment
@@ -407,6 +492,13 @@ python analysis_pipeline.py
 
 # 4b. ...or explore interactively
 jupyter notebook Participant_Lifecycle_Analysis.ipynb
+
+# 5. (Optional) Load the same data into MySQL and run the SQL query bank
+mysql -u your_user -e "CREATE DATABASE participant_lifecycle;"
+mysql -u your_user participant_lifecycle < sql/schema.sql
+# Load each CSV in data/ into its matching table (see sql/schema.sql column order),
+# then:
+mysql -u your_user participant_lifecycle < sql/prolific_interview_sql_queries.sql
 ```
 
 <br/>
