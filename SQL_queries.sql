@@ -1,5 +1,5 @@
 -- =============================================================================
--- Participant Lifecycle & Retention Analytics — MySQL 8.0 Interview Query Bank
+-- Participant Lifecycle & Retention Analytics — MySQL 8.0 
 -- Schema: participants, onboarding, studies, submissions, payments, engagement_events
 -- Run this file top to bottom in a single session (the @report_date variable
 -- persists across statements within one session/connection).
